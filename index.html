@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Прайминг: Ultra Smooth</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background-color: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        body::after {
+            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://grainy-gradients.vercel.app/noise.svg');
+            opacity: 0.03; pointer-events: none; z-index: 1000;
+        }
+
+        .center-title {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; z-index: 2; pointer-events: none;
+        }
+        .center-title p { font-size: 9px; letter-spacing: 6px; text-transform: uppercase; opacity: 0.3; margin-bottom: 10px; }
+        .center-title h1 { font-size: 32px; font-weight: 200; letter-spacing: -1px; margin: 0; text-transform: uppercase; }
+
+        .scene { position: relative; width: 100vw; height: 100vh; }
+
+        /* КАРТОЧКА */
+        .slide-card {
+            position: absolute;
+            width: 260px; height: 340px;
+            cursor: pointer;
+            border-radius: 2px;
+            z-index: 5;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.9);
+            will-change: transform, width, height, top, left;
+            background-color: #111;
+            overflow: hidden;
+        }
+
+        /* Фон карточки */
+        .card-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            z-index: 2;
+            will-change: top, left, width, height, transform;
+            /* Важно: origin для трансформаций */
+            transform-origin: center center;
+        }
+
+        /* Инфо после просмотра */
+        .minimized-info {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 30px; box-sizing: border-box;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            opacity: 0; transform: translateY(10px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            z-index: 3; pointer-events: none;
+        }
+        .minimized-info h4 { font-size: 18px; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+        .minimized-info p { font-size: 11px; line-height: 1.4; color: #888; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .slide-card.viewed .card-bg { opacity: 0.15; filter: grayscale(1) blur(4px); transition: opacity 0.8s ease, filter 0.8s ease;}
+        .slide-card.viewed .minimized-info { opacity: 1; transform: translateY(0); }
+
+        /* ПОЛНОЭКРАННЫЙ КОНТЕНТ */
+        .card-content {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: transparent; 
+            display: flex; padding: 5% 10%; box-sizing: border-box;
+            opacity: 0; visibility: hidden; gap: 50px; z-index: 1;
+            align-items: center;
+        }
+        
+        .slide-card.is-expanded { background-color: #000; }
+
+        .content-left { flex: 1; max-width: 500px; z-index: 10;}
+        .content-left h2 { font-size: 64px; font-weight: 700; margin-bottom: 30px; letter-spacing: -3px; line-height: 1;}
+        .content-left p { font-size: 20px; line-height: 1.6; color: #a1a1a6; }
+        .content-left b { color: #fff; }
+        
+        .content-right-placeholder { flex: 1; height: 100%; }
+
+        .back-btn {
+            position: absolute; top: 40px; right: 40px;
+            color: #fff; background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.1);
+            padding: 12px 24px; border-radius: 40px; cursor: pointer;
+            opacity: 0; visibility: hidden; z-index: 2000;
+            text-transform: uppercase; letter-spacing: 2px; font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="center-title" id="mainTitle">
+        <p>Наливайко В.Н.</p>
+        <h1>ЭФФЕКТ ПРАЙМИНГА</h1>
+    </div>
+
+    <button class="back-btn" id="backBtn">Назад</button>
+
+    <div class="scene" id="scene"></div>
+
+    <script>
+        const scene = document.getElementById('scene');
+        const backBtn = document.getElementById('backBtn');
+        const mainTitle = document.getElementById('mainTitle');
+        let activeCard = null;
+
+        // Настройки анимации (единые для всего)
+        const ANIM_DURATION = 1.2;
+        const ANIM_EASE = "power3.inOut"; // Более мягкая кривая, чем expo
+
+        const slidesData = [
+            { 
+                n: '01', title: 'Феномен', short: 'Механика имплицитной памяти и восприятия.',
+                text: '<b>Прайминг</b> — это скрытая подготовка нашей психики. Когда вы видите один стимул, ваш мозг уже начал подбирать ассоциации для следующего. Это создание <b>ментального пути</b>, по которому мысль идет по пути наименьшего сопротивления.',
+                img: '222.jpg?q=80&w=800',
+                x: -28, y: -22, depth: 1.1
+            },
+            { 
+                n: '02', title: 'Системы', short: 'Логика бессильна в темноте.',
+                text: 'Логика (Система 2) работает, когда у вас есть карта и свет. Но принятие решений в реальном мире — это прогулка по зимнему лесу в полной темноте. Здесь карты не работают. Здесь работает <b>Система 1</b> (Инстинкт). <br><br>Прайминг — это вспышка фотоаппарата в этой тьме. Она выхватывает из пустоты лишь один объект, и ваш мозг мгновенно строит маршрут именно к нему, игнорируя всё остальное.',
+                img: '000.jpg?q=80&w=800',
+                x: 24, y: -28, depth: 1.8
+            },
+            { 
+                n: '03', title: 'Среда', short: 'Визуальный диктат. Среда как инструкция.',
+                text: 'Среда — это не фон, это скрытая команда. Ковер и медведь мгновенно отключают ваш «офисный фильтр» и запускают сценарий «разговор по душам». <br><br>Мы думаем, что анализируем факты, но на деле просто выполняем инструкции, которые нам диктует интерьер. Хотите доверия? Не пишите о нем. Просто создайте «теплую» среду.',
+                img: 'img1.jpg?q=80&w=800',
+                x: -35, y: 15, depth: 2.2
+            },
+            { 
+                n: '04', title: 'Масштаб', short: 'Архитектурный патернализм. Психология подчинения.',
+                text: 'Посмотрите на соотношение фигур. Огромная, сложная структура храма нависает над человеком. В этом кадре нет равноправия. <br><br>Это <b>эффект монументальности</b>. Психика автоматически воспринимает гигантские объекты как авторитетные и истинные. Если вы хотите отключить критическое мышление оппонента, не нужно спорить. Нужно создать среду, в которой вы — храм, а он — путник. Масштаб диктует правила.',
+                img: 'мх.jpg?q=80&w=800',
+                x: 34, y: 14, depth: 1.4
+            },
+            { 
+                n: '05', title: 'Этика', short: 'Nudge-теория. Ответственность архитектора.',
+                text: 'Когда прайминг работает, человек «закрывает глаза» и доверяет среде вести его. <br><br>Здесь проходит грань между <b>Nudge</b> (подталкиванием) и манипуляцией. Манипуляция эксплуатирует уязвимости мозга ради выгоды автора. Nudge использует те же механизмы, чтобы снизить когнитивную нагрузку и помочь человеку сделать выбор, полезный <i>для него самого</i>.',
+                img: '111.jpg?q=80&w=800',
+                x: 0, y: 35, depth: 2.0
+            }
+        ];
+
+        slidesData.forEach((data) => {
+            const card = document.createElement('div');
+            card.className = 'slide-card';
+            card.style.left = `calc(50% + ${data.x}vw - 130px)`;
+            card.style.top = `calc(50% + ${data.y}vh - 170px)`;
+            card.setAttribute('data-depth', data.depth);
+            
+            card.innerHTML = `
+                <div class="card-bg" style="background-image: url(${data.img})"></div>
+                <div class="minimized-info">
+                    <h4>${data.title}</h4>
+                    <p>${data.short}</p>
+                </div>
+                <div class="card-content">
+                    <div class="content-left">
+                        <h2>${data.title}</h2>
+                        <p>${data.text}</p>
+                    </div>
+                    <div class="content-right-placeholder"></div>
+                </div>
+            `;
+
+            card.addEventListener('click', () => zoomIn(card));
+            scene.appendChild(card);
+        });
+
+        let targetX = 0, targetY = 0;
+        let currentX = 0, currentY = 0;
+        window.addEventListener('mousemove', (e) => {
+            targetX = (e.clientX - window.innerWidth / 2) / 100;
+            targetY = (e.clientY - window.innerHeight / 2) / 100;
+        });
+
+        function animate() {
+            if (!activeCard) {
+                currentX += (targetX - currentX) * 0.05;
+                currentY += (targetY - currentY) * 0.05;
+                document.querySelectorAll('.slide-card').forEach(card => {
+                    const depth = card.getAttribute('data-depth');
+                    gsap.set(card, { x: currentX * depth * 8, y: currentY * depth * 8 });
+                });
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        function zoomIn(card) {
+            activeCard = card;
+            gsap.killTweensOf(card);
+            card.classList.add('is-expanded');
+            
+            gsap.to(mainTitle, { opacity: 0, y: -20, duration: 0.6, ease: "power2.inOut" });
+            document.querySelectorAll('.slide-card').forEach(c => {
+                if (c !== card) gsap.to(c, { opacity: 0, scale: 0.8, duration: 0.8, ease: "power4.inOut" });
+            });
+
+            // 1. Анимация раскрытия карточки
+            gsap.to(card, {
+                top: 0, left: 0, x: 0, y: 0,
+                width: '100vw', height: '100vh',
+                zIndex: 1000, borderRadius: 0,
+                duration: ANIM_DURATION,
+                ease: ANIM_EASE,
+                onComplete: () => {
+                    gsap.to(card.querySelector('.card-content'), { opacity: 1, visibility: 'visible', duration: 0.6 });
+                    gsap.to(backBtn, { opacity: 1, visibility: 'visible', duration: 0.6 });
+                }
+            });
+
+            // 2. Анимация картинки (Плавная)
+            gsap.to(card.querySelector('.card-bg'), {
+                left: '75%', 
+                top: '50%',  
+                xPercent: -50, 
+                yPercent: -50, 
+                width: '350px', 
+                height: '450px', 
+                borderRadius: '4px',
+                boxShadow: '0 50px 100px rgba(0,0,0,0.6)',
+                duration: ANIM_DURATION,
+                ease: ANIM_EASE // Та же easing function для синхронности
+            });
+        }
+
+        backBtn.addEventListener('click', () => {
+            if (!activeCard) return;
+            const card = activeCard;
+            const data = slidesData.find(d => d.title === card.querySelector('h2').innerText);
+            const content = card.querySelector('.card-content');
+            const bg = card.querySelector('.card-bg');
+
+            // 1. Скрываем контент
+            gsap.killTweensOf(content);
+            gsap.killTweensOf(backBtn);
+
+            gsap.to([content, backBtn], { 
+                opacity: 0, 
+                duration: 0.3,
+                onComplete: () => {
+                    gsap.set(content, { visibility: 'hidden' });
+                    gsap.set(backBtn, { visibility: 'hidden' });
+                    
+                    // 2. Запускаем сжатие
+                    closeCardAnimation(card, data, bg);
+                }
+            });
+        });
+
+        function closeCardAnimation(card, data, bg) {
+             // 2.1 Сжимаем саму карточку
+             gsap.to(card, {
+                width: 260, height: 340,
+                top: `calc(50% + ${data.y}vh - 170px)`,
+                left: `calc(50% + ${data.x}vw - 130px)`,
+                x: 0, y: 0,
+                zIndex: 5, borderRadius: 2,
+                duration: ANIM_DURATION,
+                ease: ANIM_EASE,
+                onComplete: () => {
+                    card.classList.remove('is-expanded');
+                    card.classList.add('viewed');
+                    activeCard = null;
+                    gsap.to(mainTitle, { opacity: 1, y: 0, duration: 0.6 });
+                    document.querySelectorAll('.slide-card').forEach(c => gsap.to(c, { opacity: 1, scale: 1, duration: 0.8 }));
+                    
+                    // ВАЖНО: Возвращаем проценты для респонсива после анимации
+                    gsap.set(bg, { width: '100%', height: '100%' });
+                }
+            });
+
+             // 2.2 Сжимаем картинку В ПИКСЕЛИ (чтобы не было бага с расширением)
+             gsap.to(bg, {
+                left: 0, top: 0,
+                xPercent: 0, yPercent: 0,
+                // Анимируем в конкретные размеры закрытой карточки!
+                width: '260px', 
+                height: '340px',
+                borderRadius: '0px',
+                boxShadow: 'none',
+                duration: ANIM_DURATION,
+                ease: ANIM_EASE
+            });
+        }
+    </script>
+</body>
+</html>
